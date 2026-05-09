@@ -2,6 +2,33 @@ import pygame
 import math
 import random
 
+
+class AnimatedMainTown:
+    def __init__(self, x, y, path, team, scale_factor=1.0):
+        self.original_image = pygame.image.load(path).convert_alpha()
+        if scale_factor != 1.0:
+            new_size = (int(self.original_image.get_width() * scale_factor),
+                        int(self.original_image.get_height() * scale_factor))
+            self.image = pygame.transform.scale(self.original_image, new_size)
+        else:
+            self.image = self.original_image
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.team = team
+        self.time = 0
+
+    def update(self, dt):
+        # Có thể thêm animation cho nhà chính (ví dụ glow)
+        self.time += dt * 2
+        self.glow = int(30 * (math.sin(self.time * 5) + 1))
+
+    def get_image(self):
+        img = self.image.copy()
+        if self.glow > 10:
+            overlay = pygame.Surface(img.get_size(), pygame.SRCALPHA)
+            overlay.fill((self.glow, self.glow, self.glow, 80))
+            img.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+        return img, self.rect
+
 class AnimatedTower:
     def __init__(self, x, y, path, team, scale_factor=1.0):
         self.original_image = pygame.image.load(path).convert_alpha()
@@ -118,3 +145,4 @@ class AnimatedWater:
         # Kết hợp nền nước + hiệu ứng sóng
         surface.blit(self.background, (0, 0))
         surface.blit(self.wave_surface, (0, 0))
+

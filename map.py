@@ -1,5 +1,5 @@
 import pygame
-from animated_objects import AnimatedTower, AnimatedGrass, AnimatedWater
+from animated_objects import AnimatedTower, AnimatedGrass, AnimatedMainTown
 
 class GameMap:
     def __init__(self, screen, scale_factor=1.0):
@@ -22,22 +22,41 @@ class GameMap:
 
         self.animated_objects = []
 
+        # ----- NHÀ CHÍNH (main town) -----
+        # ⚠️ BẠN CẦN LẤY LẠI TỌA ĐỘ GỐC BẰNG CÁCH CLICK CHUỘT TRÊN MAP MỚI
+        main_town_positions_original = [
+            (5, 230, "blue"),    # tạm giữ, nhưng hãy click để lấy lại
+            (972, 246, "red")
+        ]
+        main_town_scale = self.scale_factor * 0.6    # giảm từ 0.3 xuống 0.25 (nhỏ hơn)
+        for x, y, team in main_town_positions_original:
+            sx = int(x * self.scale_factor)
+            sy = int(y * self.scale_factor)
+            path = f"assets/images/main-town-{team}.png"
+            try:
+                obj = AnimatedMainTown(sx, sy, path, team, main_town_scale)
+                self.animated_objects.append(obj)
+                print(f"Main town {team} at ({sx}, {sy})")
+            except Exception as e:
+                print(f"Lỗi main town {team}: {e}")
+
         # ----- BỤI CỎ (tọa độ gốc) -----
         grass_positions_original = [
-            (368, 135), (258, 135), (257, 212), (377, 219),
+            (320, 135), (300, 135), (320, 212), (300, 212),
         ]
-        grass_scale = self.scale_factor * 0.25   # nhỏ hơn map
+        grass_scale = self.scale_factor * 0.4
         for x, y in grass_positions_original:
             sx = int(x * self.scale_factor)
             sy = int(y * self.scale_factor)
             self.animated_objects.append(AnimatedGrass(sx, sy, "assets/images/grass.png", grass_scale))
 
         # ----- THÁP (tọa độ gốc) -----
+        # ⚠️ CẦN LẤY LẠI TỌA ĐỘ CHO MAP 1400x768
         tower_positions_original = [
-            (276, 161, "blue"), (192, 163, "blue"),
-            (386, 162, "red"), (479, 164, "red")
+            (384, 290, "blue"), (565, 290, "blue"),
+            (766, 290, "red"), (953, 290, "red")
         ]
-        tower_scale = self.scale_factor * 0.15
+        tower_scale = self.scale_factor * 0.45   # giảm từ 0.15 xuống 0.12 (nhỏ hơn)
         for idx, (x, y, team) in enumerate(tower_positions_original):
             sx = int(x * self.scale_factor)
             sy = int(y * self.scale_factor)
@@ -50,40 +69,18 @@ class GameMap:
                 print(f"Không tìm thấy ảnh: {path}")
             except Exception as e:
                 print(f"Lỗi khác: {e}")
-        # ----- CÁC VÙNG NƯỚC -----
-        self.water_areas = []
 
-        # Vùng nước thứ nhất (khe trên) - hãy chỉnh lại tọa độ theo click của bạn
-        water_rect_original1 = (242, 1, 191, 130)
-        scaled_rect1 = (int(water_rect_original1[0] * self.scale_factor),
-                        int(water_rect_original1[1] * self.scale_factor),
-                        int(water_rect_original1[2] * self.scale_factor),
-                        int(water_rect_original1[3] * self.scale_factor))
-        self.water_areas.append(AnimatedWater(*scaled_rect1, self.scale_factor, "assets/images/water.png"))
-
-        # Vùng nước thứ hai (khe dưới) - thay tọa độ bằng số bạn đo được
-        water_rect_original2 = (243, 237, 197, 126)  # ví dụ
-        scaled_rect2 = (int(water_rect_original2[0] * self.scale_factor),
-                        int(water_rect_original2[1] * self.scale_factor),
-                        int(water_rect_original2[2] * self.scale_factor),
-                        int(water_rect_original2[3] * self.scale_factor))
-        self.water_areas.append(AnimatedWater(*scaled_rect2, self.scale_factor, "assets/images/water.png"))
+        # ----- ĐÃ XÓA TOÀN BỘ NƯỚC -----
 
     def update(self, dt, player_rect=None):
         for obj in self.animated_objects:
             obj.update(dt)
-        for water in self.water_areas:
-            water.update(dt)
 
     def draw(self):
         self.screen.blit(self.background, (0, 0))
         for obj in self.animated_objects:
             img, rect = obj.get_image()
             self.screen.blit(img, rect)
-        for water in self.water_areas:
-            water_surf = pygame.Surface((water.rect.w, water.rect.h), pygame.SRCALPHA)
-            water.draw(water_surf)
-            self.screen.blit(water_surf, (water.rect.x, water.rect.y))
 
     def handle_click(self, pos):
         original_x = int(pos[0] / self.scale_factor)
