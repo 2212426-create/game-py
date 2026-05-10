@@ -1,5 +1,5 @@
 import pygame
-from animated_objects import AnimatedTower, AnimatedGrass, AnimatedMainTown, Creep
+from animated_objects import AnimatedTower, AnimatedGrass, AnimatedMainTown, Creep, AnimatedCharacter
 
 class GameMap:
     def __init__(self, screen, scale_factor=1.0):
@@ -22,14 +22,12 @@ class GameMap:
 
         self.animated_objects = []
 
-
         # ----- NHÀ CHÍNH (main town) -----
-        # ⚠️ BẠN CẦN LẤY LẠI TỌA ĐỘ GỐC BẰNG CÁCH CLICK CHUỘT TRÊN MAP MỚI
         main_town_positions_original = [
-            (5, 230, "blue"),    # tạm giữ, nhưng hãy click để lấy lại
+            (5, 230, "blue"),
             (972, 246, "red")
         ]
-        main_town_scale = self.scale_factor * 0.6    # giảm từ 0.3 xuống 0.25 (nhỏ hơn)
+        main_town_scale = self.scale_factor * 0.6
         for x, y, team in main_town_positions_original:
             sx = int(x * self.scale_factor)
             sy = int(y * self.scale_factor)
@@ -41,7 +39,7 @@ class GameMap:
             except Exception as e:
                 print(f"Lỗi main town {team}: {e}")
 
-        # ----- BỤI CỎ (tọa độ gốc) -----
+        # ----- BỤI CỎ -----
         grass_positions_original = [
             (320, 135), (300, 135), (320, 212), (300, 212),
         ]
@@ -51,12 +49,12 @@ class GameMap:
             sy = int(y * self.scale_factor)
             self.animated_objects.append(AnimatedGrass(sx, sy, "assets/images/grass.png", grass_scale))
 
-        # ----- THÁP (tọa độ gốc) -----
+        # ----- THÁP -----
         tower_positions_original = [
             (384, 290, "blue"), (565, 290, "blue"),
             (766, 290, "red"), (953, 290, "red")
         ]
-        tower_scale = self.scale_factor * 0.45   # giảm từ 0.15 xuống 0.12 (nhỏ hơn)
+        tower_scale = self.scale_factor * 0.45
         for idx, (x, y, team) in enumerate(tower_positions_original):
             sx = int(x * self.scale_factor)
             sy = int(y * self.scale_factor)
@@ -70,15 +68,39 @@ class GameMap:
             except Exception as e:
                 print(f"Lỗi khác: {e}")
 
+        # ----- NHÂN VẬT (AnimatedCharacter) từ Trug-Kin -----
+        hero_original_x = 171
+        hero_original_y = 499
+        hero_scale = self.scale_factor * 0.3
+        hero_x = int(hero_original_x * self.scale_factor)
+        hero_y = int(hero_original_y * self.scale_factor)
+        try:
+            self.animated_objects.append(AnimatedCharacter(hero_x, hero_y, hero_scale))
+            print(f"Added animated character at ({hero_x},{hero_y})")
+        except Exception as e:
+            print(f"Không thể tạo nhân vật: {e}")
+
+        # ----- VÙNG DI CHUYỂN (POLYGON) từ Trug-Kin -----
+        polygon_original = [
+            (504, 762),(352, 761),(352, 653),(169, 501),(222, 436),(218, 433),
+            (324, 367),(324, 370),(225, 292),(425, 168),(432, 136),(336, 47),
+            (339, 1),(500, 1),(503, 280),(905, 284),(907, 2),(1070, 2),
+            (1071, 61),(1025, 97),(1024, 150),(1013, 166),(1008, 185),
+            (1056, 225),(1071, 235),(1071, 250),(1103, 263),(1144, 293),
+            (1075, 373),(1074, 391),(1164, 433),(1132, 449),(1138, 470),
+            (1103, 442),(1039, 475),(1043, 756),(921, 756),(920, 493),
+            (505, 486),(501, 754)
+        ]
+        self.polygon = [(int(x * self.scale_factor), int(y * self.scale_factor)) for x, y in polygon_original]
+
         # ----- LÍNH (CREEP) -----
-        self.creeps = []                # danh sách lính hiện có
+        self.creeps = []
         self.wave_timer = 0
-        self.wave_interval = 10.0       # mỗi 10 giây sinh 1 đợt
-        self.creeps_per_wave = 4        # mỗi đợt 4 lính mỗi bên
-        self.spawn_check_distance = 100   # pixel
+        self.wave_interval = 10.0
+        self.creeps_per_wave = 4
+        self.spawn_check_distance = 100
         self.spawn_blocked = {'blue': False, 'red': False}
 
-        # ĐIỂM SPAWN (tọa độ gốc của map 1400x768, bạn cần lấy lại bằng click)
         self.spawn_points = {
             'blue': (87, 204),
             'red': (945, 210)
@@ -88,7 +110,6 @@ class GameMap:
             'red': (120, 280)
         }
 
-        # Scale các điểm spawn và target
         self.spawn_scaled = {}
         self.target_scaled = {}
         for team, (x, y) in self.spawn_points.items():
@@ -96,10 +117,27 @@ class GameMap:
         for team, (x, y) in self.target_points.items():
             self.target_scaled[team] = (int(x * self.scale_factor), int(y * self.scale_factor))
 
-    def update(self, dt, player_rect=None):
-        # Cập nhật object tĩnh
+    def point_in_polygon(self, x, y):
+        """Kiểm tra điểm có nằm trong vùng poly cho nhân vật di chuyển"""
+        inside = False
+        polygon = self.polygon
+        n = len(polygon)
+        for i in range(n):
+            x1, y1 = polygon[i]
+            x2, y2 = polygon[(i + 1) % n]
+            if ((y1 > y) != (y2 > y)):
+                xinters = (x2 - x1) * (y - y1) / (y2 - y1 + 0.00001) + x1
+                if x < xinters:
+                    inside = not inside
+        return inside
+
+    def update(self, dt, keys=None):
+        # Cập nhật các object tĩnh (nhà, cỏ, tháp) và nhân vật
         for obj in self.animated_objects:
-            obj.update(dt)
+            if isinstance(obj, AnimatedCharacter):
+                obj.update(dt, keys, self)  # truyền keys và chính map để check polygon
+            else:
+                obj.update(dt)
 
         # Cập nhật lính (di chuyển + combat)
         blue_creeps = [c for c in self.creeps if c.team == 'blue']
@@ -111,13 +149,7 @@ class GameMap:
         # Xóa lính chết
         self.creeps = [c for c in self.creeps if c.hp > 0]
 
-        # Xóa lính đến target (nếu muốn)
-        '''for creep in self.creeps[:]:
-            if (abs(creep.rect.x - creep.target[0]) < 20 and
-                    abs(creep.rect.y - creep.target[1]) < 20):
-                self.creeps.remove(creep)'''
-
-        # Kiểm tra xem khu vực spawn có còn lính không
+        # Kiểm tra spawn bị chặn
         for team in ['blue', 'red']:
             spawn_pt = self.spawn_scaled[team]
             blocked = False
@@ -125,12 +157,12 @@ class GameMap:
                 if creep.team == team:
                     dx = creep.rect.x - spawn_pt[0]
                     dy = creep.rect.y - spawn_pt[1]
-                    if dx * dx + dy * dy < self.spawn_check_distance ** 2:
+                    if dx*dx + dy*dy < self.spawn_check_distance ** 2:
                         blocked = True
                         break
             self.spawn_blocked[team] = blocked
 
-        # Spawn wave nếu timer hết và không bị chặn
+        # Spawn wave
         self.wave_timer += dt
         if self.wave_timer >= self.wave_interval:
             self.wave_timer = 0
@@ -141,68 +173,98 @@ class GameMap:
 
     def draw(self):
         self.screen.blit(self.background, (0, 0))
+        # Vẽ tất cả animated_objects (bao gồm nhân vật, nhà, cỏ, tháp)
         for obj in self.animated_objects:
             img, rect = obj.get_image()
             self.screen.blit(img, rect)
+        # Vẽ lính và thanh máu lính
         for creep in self.creeps:
             img, rect = creep.get_image()
             self.screen.blit(img, rect)
-            creep.draw_health_bar(self.screen)  # vẽ thanh máu
+            creep.draw_health_bar(self.screen)
+        # Vẽ thanh máu và stamina của nhân vật (nếu có)
+        self.draw_character_health_bars()
+
+    def draw_character_health_bars(self):
+        """Vẽ thanh HP và stamina cho nhân vật"""
+        player = self.get_character()
+        if not player:
+            return
+        bar_width = 260
+        bar_height = 18
+        x = 20
+        y = 20
+        border_color = (255, 255, 255)
+        hp_bg_color = (50, 0, 0)
+        hp_color = (200, 20, 20)
+        stamina_bg_color = (40, 20, 0)
+        stamina_color = (240, 180, 40)
+
+        pygame.draw.rect(self.screen, border_color, (x - 2, y - 2, bar_width + 4, bar_height + 4), border_radius=8)
+        pygame.draw.rect(self.screen, hp_bg_color, (x, y, bar_width, bar_height), border_radius=8)
+        hp_ratio = max(0, player.health) / max(1, player.max_health)
+        fill_width = int(bar_width * hp_ratio)
+        pygame.draw.rect(self.screen, hp_color, (x, y, fill_width, bar_height), border_radius=8)
+
+        stamina_y = y + bar_height + 10
+        pygame.draw.rect(self.screen, border_color, (x - 2, stamina_y - 2, bar_width + 4, bar_height + 4), border_radius=8)
+        pygame.draw.rect(self.screen, stamina_bg_color, (x, stamina_y, bar_width, bar_height), border_radius=8)
+        stamina_ratio = max(0, player.stamina) / max(1, player.max_stamina)
+        stamina_width = int(bar_width * stamina_ratio)
+        pygame.draw.rect(self.screen, stamina_color, (x, stamina_y, stamina_width, bar_height), border_radius=8)
+
+        font = pygame.font.SysFont(None, 20)
+        hp_text = font.render(f"HP: {player.health}/{player.max_health}", True, (255, 255, 255))
+        self.screen.blit(hp_text, (x + 8, y - 2))
+        st_text = font.render(f"STAMINA: {int(player.stamina)}/{player.max_stamina}", True, (255, 255, 255))
+        self.screen.blit(st_text, (x + 8, stamina_y - 2))
+
+    def get_character(self):
+        """Trả về đối tượng AnimatedCharacter nếu có"""
+        for obj in self.animated_objects:
+            if isinstance(obj, AnimatedCharacter):
+                return obj
+        return None
 
     def handle_click(self, pos):
         original_x = int(pos[0] / self.scale_factor)
         original_y = int(pos[1] / self.scale_factor)
         print(f"🖱️ Click tại screen: {pos} -> ảnh gốc: ({original_x}, {original_y})")
-    #
+
     def spawn_wave(self, team):
         spawn_base = self.spawn_scaled[team]
         target_pos = self.target_scaled[team]
 
-        # Định nghĩa danh sách lính theo thứ tự từ TRƯỚC đến SAU (front to back)
         if team == 'blue':
-            # Hàng ngang: di chuyển sang phải, front là x lớn hơn, back là x nhỏ hơn
             creep_order = [
-                ('orc_tanker', 'orc-tanker.png'),  # đứng trước nhất
-                ('orc_warrior', 'orc-warrior.png'),  # lính thứ 4 (có thể đổi)
+                ('orc_tanker', 'orc-tanker.png'),
+                ('orc_warrior', 'orc-warrior.png'),
                 ('orc_warrior', 'orc-warrior.png'),
                 ('slime', 'slime.png'),
-
             ]
-        else:  # red
-            # Di chuyển sang trái, front là x nhỏ hơn, back là x lớn hơn
+        else:
             creep_order = [
-                ('warrior', 'warrior.png'),  # front
+                ('warrior', 'warrior.png'),
                 ('warrior', 'warrior.png'),
                 ('archer', 'archer.png'),
                 ('mage', 'mage.png'),
-
             ]
 
-        # Khoảng cách giữa các lính trong hàng (pixel, theo phương di chuyển)
         spacing = 25
-        # Xác định chiều (+1: blue đi phải, -1: red đi trái)
         direction = 1 if target_pos[0] > spawn_base[0] else -1
 
         for idx, (creep_type, img_file) in enumerate(creep_order):
             img_path = f"assets/images/{img_file}"
-            # Tính offset dọc theo hàng: idx càng lớn (càng về sau) thì offset càng âm (lùi về phía nhà)
-            if direction == 1:  # blue: front có offset lớn hơn (x càng lớn càng gần địch)
-                offset_x = (len(creep_order) - 1 - idx) * spacing  # front có offset max
-            else:  # red: front có offset âm (x càng nhỏ càng gần địch)
+            if direction == 1:
+                offset_x = (len(creep_order) - 1 - idx) * spacing
+            else:
                 offset_x = -((len(creep_order) - 1 - idx) * spacing)
-            # Nếu là lính đánh xa (slime, archer, mage) có thể lùi thêm chút nữa
-
             if creep_type in ['slime', 'archer']:
-                offset_x += -15 * direction  # lùi thêm 8 pixel
+                offset_x += -15 * direction
             if creep_type in ['mage']:
-                offset_x += -25 * direction  # lùi thêm 8 pixel
-
-            # Tọa độ spawn thực tế
+                offset_x += -25 * direction
             spawn_x = spawn_base[0] + offset_x
-            # Giữ nguyên y (cùng lane), có thể thêm offset nhỏ để tránh chồng khít
-            spawn_y = spawn_base[1] + (idx % 2) * 6  # hơi lệch dọc để tránh đè lên nhau
-
+            spawn_y = spawn_base[1] + (idx % 2) * 6
             creep = Creep(spawn_x, spawn_y, team, target_pos, creep_type, img_path, self.scale_factor)
             self.creeps.append(creep)
-
         print(f"Đợt lính {team} spawn theo hàng dọc, ranged ở cuối")
