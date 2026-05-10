@@ -85,64 +85,155 @@ class AnimatedGrass:
         new_rect = rotated.get_rect(center=self.rect.center)
         return rotated, new_rect
 
+    #///
+class Creep:
+    def __init__(self, x, y, team, target, creep_type, image_path, scale_factor=1.0):
+        self.original_image = pygame.image.load(image_path).convert_alpha()
+        if scale_factor != 1.0:
+            new_size = (int(self.original_image.get_width() * scale_factor),
+                        int(self.original_image.get_height() * scale_factor))
+            self.image = pygame.transform.scale(self.original_image, new_size)
+        else:
+            self.image = self.original_image
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.team = team
+        self.target = target
+        self.type = creep_type
+        self.spawn_x = x
+        self.spawn_y = y
 
-class AnimatedWater:
-    def __init__(self, x, y, w, h, scale_factor=1.0, image_path="assets/images/water.png"):
-        self.rect = pygame.Rect(x, y, w, h)
-        self.time = 0
-        self.w = w
-        self.h = h
+        # Chỉ số mặc định
+        self.max_hp = 100
+        self.hp = 100
+        self.attack_damage = 10
+        self.attack_cooldown = 0
+        self.attack_range = 40
+        self.attack_speed = 1.0
+        self.cooldown_max = 1.0 / self.attack_speed
+        self.speed = 100
+        self.is_ranged = False
 
-        # Load ảnh nền nước nếu có, nếu không thì tạo surface xanh
-        try:
-            self.background = pygame.image.load(image_path).convert_alpha()
-            self.background = pygame.transform.scale(self.background, (w, h))
-        except:
-            self.background = pygame.Surface((w, h))
-            self.background.fill((0, 150, 200))  # xanh biển nhạt
+        # Gán theo loại (đã tăng tốc độ cho warrior/archer/mage)
+        if creep_type == "orc_warrior":
+            self.max_hp = 120
+            self.attack_damage = 15
+            self.speed = 120
+            self.attack_range = 35
+        elif creep_type == "orc_tanker":
+            self.max_hp = 250
+            self.attack_damage = 8
+            self.speed = 110
+            self.attack_range = 35
+        elif creep_type == "slime":
+            self.max_hp = 70
+            self.attack_damage = 12
+            self.speed = 110
+            self.attack_range = 110
+            self.is_ranged = True
+        elif creep_type == "warrior":
+            self.max_hp = 100
+            self.attack_damage = 12
+            self.speed = 110
+            self.attack_range = 35
+        elif creep_type == "archer":
+            self.max_hp = 70
+            self.attack_damage = 18
+            self.speed = 110
+            self.attack_range = 120
+            self.is_ranged = True
+        elif creep_type == "mage":
+            self.max_hp = 80
+            self.attack_damage = 20
+            self.speed = 105
+            self.attack_range = 130
+            self.is_ranged = True
+        else:
+            self.max_hp = 100
+            self.attack_damage = 10
+            self.speed = 100
 
-        # Tạo một surface tạm để vẽ sóng
-        self.wave_surface = pygame.Surface((w, h), pygame.SRCALPHA)
+        self.hp = self.max_hp
 
-        # Tham số sóng
-        self.wave_amplitude = 4  # độ cao sóng (pixel)
-        self.wave_length = 30  # khoảng cách giữa các đỉnh sóng
-        self.wave_speed = 3.0  # tốc độ di chuyển
+    def attack(self, enemy):
+        """Tấn công kẻ địch"""
+        enemy.take_damage(self.attack_damage)
+        self.attack_cooldown = self.cooldown_max
 
-    def update(self, dt):
-        self.time += dt * self.wave_speed
+    def update(self, dt, enemies):
+        if self.attack_cooldown > 0:
+            self.attack_cooldown -= dt
 
-    def draw(self, surface):
-        # Xóa surface vẽ sóng
-        self.wave_surface.fill((0, 0, 0, 0))
+        # Tìm kẻ địch gần nhất trong tầm phát hiện
+        detection_range = self.attack_range + 150
+        closest = None
+        min_dist = detection_range
+        for e in enemies:
+            if e.team != self.team and e.hp > 0:
+                dx = e.rect.centerx - self.rect.centerx
+                dy = e.rect.centery - self.rect.centery
+                dist = math.hypot(dx, dy)
+                if dist < min_dist:
+                    min_dist = dist
+                    closest = e
 
-        # Vẽ các đường sóng ngang
-        for y in range(0, self.h, 8):  # vẽ mỗi 8 pixel một đường sóng
-            # Tính độ dịch pha theo chiều ngang
-            phase = self.time
-            # Vẽ đường cong sin mờ
-            points = []
-            for x in range(0, self.w, 4):
-                # Sóng chính
-                offset_y = self.wave_amplitude * math.sin(x / self.wave_length + phase)
-                # Thêm sóng phụ (tần số cao hơn) để rối hơn
-                offset_y += 2 * math.sin(x / 12 - phase * 2.5)
-                points.append((x, y + offset_y))
-            # Vẽ đường mờ trắng/xanh
-            if len(points) > 1:
-                pygame.draw.lines(self.wave_surface, (255, 255, 255, 60), False, points, 1)
+        if closest:
+            # Tấn công nếu trong tầm
+            if self.attack_cooldown <= 0 and min_dist <= self.attack_range:
+                self.attack(closest)
 
-        # Vẽ thêm các "đợt sóng" sáng hơn chạy dọc
-        for offset in range(0, self.w, 60):
-            x = (self.time * 50 + offset) % (self.w + 100) - 50
-            highlight_surf = pygame.Surface((80, self.h), pygame.SRCALPHA)
-            for i in range(self.h):
-                alpha = 40 - abs(i - self.h / 2) * 0.5
-                if alpha > 0:
-                    pygame.draw.line(highlight_surf, (255, 255, 255, alpha), (0, i), (80, i), 1)
-            self.wave_surface.blit(highlight_surf, (x, 0), special_flags=pygame.BLEND_ALPHA_SDL2)
+            # Xử lý di chuyển: ranged chỉ tiến, không lùi
+            if self.is_ranged:
+                ideal_dist = self.attack_range - 10
+                dx = self.rect.centerx - closest.rect.centerx
+                dy = self.rect.centery - closest.rect.centery
+                dist = math.hypot(dx, dy)
+                # Chỉ tiến lại nếu quá xa, không bao giờ lùi
+                if dist > ideal_dist + 20:
+                    if dist > 0:
+                        step = min(self.speed * dt, dist - ideal_dist)
+                        self.rect.x -= dx / dist * step
+                        self.rect.y -= dy / dist * step
+                # Nếu quá gần hoặc trong tầm lý tưởng: đứng yên
+            else:
+                # Cận chiến: lao vào địch
+                dx = closest.rect.centerx - self.rect.centerx
+                dy = closest.rect.centery - self.rect.centery
+                dist = math.hypot(dx, dy)
+                if dist > 5:
+                    step = min(self.speed * dt, dist)
+                    self.rect.x += dx / dist * step
+                    self.rect.y += dy / dist * step
+            return
 
-        # Kết hợp nền nước + hiệu ứng sóng
-        surface.blit(self.background, (0, 0))
-        surface.blit(self.wave_surface, (0, 0))
+        # Không có địch: di chuyển về target (base đối phương)
+        dx = self.target[0] - self.rect.x
+        dy = self.target[1] - self.rect.y
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            step_x = dx / dist * self.speed * dt
+            step_y = dy / dist * self.speed * dt
+            self.rect.x += step_x
+            self.rect.y += step_y
 
+        # Giới hạn map (tránh bay ra ngoài)
+        if self.rect.x < -300 or self.rect.x > 2300:
+            self.hp = 0
+
+    def take_damage(self, amount):
+        self.hp -= amount
+        if self.hp <= 0:
+            self.hp = 0
+            return True
+        return False
+
+    def draw_health_bar(self, screen, camera_x=0, camera_y=0):
+        bar_width = 40
+        bar_height = 6
+        x = self.rect.x - camera_x + (self.rect.width - bar_width) // 2
+        y = self.rect.y - camera_y - 8
+        pygame.draw.rect(screen, (255, 0, 0), (x, y, bar_width, bar_height))
+        health_percent = max(0, self.hp / self.max_hp)
+        pygame.draw.rect(screen, (0, 255, 0), (x, y, bar_width * health_percent, bar_height))
+
+    def get_image(self):
+        return self.image, self.rect
