@@ -23,18 +23,29 @@ game_map = GameMap(screen, scale_factor=scale_factor)
 # Bấm chuột để lấy tọa độ gốc, sau đó cập nhật vào map.py
 
 running = True
+restart_timer = 0
 while running:
     dt = clock.tick(60) / 1000.0
+    keys = pygame.key.get_pressed()
+
+    if game_map.game_over:
+        restart_timer += dt
+        if restart_timer >= 3.0:
+            # Restart the game
+            game_map = GameMap(screen, scale_factor=scale_factor)
+            restart_timer = 0
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            game_map.handle_click(event.pos)   # in ra world và original
+            game_map.handle_click(event.pos)  # in ra world và original
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             running = False
 
-    game_map.update(dt)
-    screen.fill((0,0,0))
+    if not game_map.game_over:
+        game_map.update(dt, keys)
+    screen.fill((0, 0, 0))
     game_map.draw()
     pygame.display.flip()
 
